@@ -1,0 +1,146 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Mar 26 18:52:05 2022
+
+@author: JN
+"""
+
+ import os  
+
+ import cv2  
+
+ from base_camera import BaseCamera  
+
+import numpy as np  
+
+''''' 
+
+7. Configure target color and HSV color space 
+
+8. '''  
+
+ colorUpper = np.array([44, 255, 255])  
+
+ colorLower = np.array([24, 100, 100])  
+
+   
+
+ font = cv2.FONT_HERSHEY_SIMPLEX  
+
+
+ class Camera(BaseCamera):  
+
+    video_source = 0  
+   
+
+    def __init__(self):  
+
+         if os.environ.get('OPENCV_CAMERA_SOURCE'):  
+
+            Camera.set_video_source(int(os.environ['OPENCV_CAMERA_SOURCE']))  
+
+         super(Camera, self).__init__()  
+
+   
+
+     @staticmethod  
+
+     def set_video_source(source):  
+
+         Camera.video_source = source  
+
+   
+
+     @staticmethod  
+
+    def frames():  
+
+         camera = cv2.VideoCapture(Camera.video_source)  
+
+         if not camera.isOpened():  
+
+            raise RuntimeError('Could not start camera.')  
+
+ 
+
+        while True:  
+
+          # read current frame  
+
+             _, img = camera.read() #Obtain images captured by the camera  
+
+   
+
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)  #Transfrom the images to HSV color space   
+
+             mask = cv2.inRange(hsv, colorLower, colorUpper) #Loop to detect the color based on the target color range in the HSV color space, and turn the color blocks into masks  
+
+            mask = cv2.erode(mask, None, iterations=2)  #Erode and diminish the small masks (hot pixels) in the image (eliminate small color blocks or hot pixels)  
+
+             mask = cv2.dilate(mask, None, iterations=2) #Dilate, to resize the large masks eroded in the previous line to the original  
+
+             cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,  
+               cv2.CHAIN_APPROX_SIMPLE)[-2]            #Find masks in the image  
+
+             center = None         
+
+             if len(cnts) > 0:   #If the number of masks is more than 1,  
+
+                 ''''' 
+
+                 Find the coordinate of the center and size of the target color object in the image
+
+                 '''  
+
+                 c = max(cnts, key=cv2.contourArea)  
+                 ((box_x, box_y), radius) = cv2.minEnclosingCircle(c)  
+
+                 M = cv2.moments(c)  
+
+                center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))  
+
+                 X = int(box_x)  
+                Y = int(box_y)  
+                ''''' 
+
+                 Obtain and output the coordinate of the center of the target color object
+
+                 '''  
+
+                print('Target color object detected')  
+
+                print('X:%d'%X)  
+
+                print('Y:%d'%Y)  
+
+                 print('-------')  
+
+  
+
+                 ''''' 
+                 Show the text "Target Detected" in the image 
+
+                 '''  
+
+                 cv2.putText(img,'Target Detected',(40,60), font, 0.5,(255,255,255),1,cv2.LINE_AA)  
+                 ''''' 
+
+                Mark the target with a frame   
+
+                 '''  
+
+                 cv2.rectangle(img,(int(box_x-radius),int(box_y+radius)),  
+
+                              (int(box_x+radius),int(box_y-radius)),(255,255,255),1)  
+
+             else:  
+
+                cv2.putText(img,'Target Detecting',(40,60), font, 0.5,(255,255,255),1,cv2.LINE_AA)  
+
+                 print('No target color object detected')  
+
+              
+
+            # encode as a jpeg image and return it  
+
+            yield cv2.imencode('.jpg', img)[1].tobytes()  
